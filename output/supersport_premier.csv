@@ -1,0 +1,8 @@
+home_team,away_team,start_time,date,odds_home,odds_draw,odds_away,category,market,over,under,source
+Arsenal,West Ham,16:00,Sat (04 Oct),1.2,6.5,13.25,Football / England / Premier League,Match Result,2.8,3.7,SuperSportBET
+Chelsea,Liverpool,16:00,Sat (04 Oct),2.8,3.7,2.3,Football / England / Premier League,Match Result,3.5,3.6,SuperSportBET
+Wolverhampton,Brighton,18:30,Sat (04 Oct),3.5,3.6,2.03,Football / England / Premier League,Match Result,1.6,3.8,SuperSportBET
+Aston Villa,Burnley,15:00,Sun (05 Oct),1.6,3.8,5.5,Football / England / Premier League,Match Result,1.55,4.33,SuperSportBET
+Newcastle,Nottingham Forest,15:00,Sun (05 Oct),1.55,4.33,5.5,Football / England / Premier League,Match Result,2.5,3.2,SuperSportBET
+Everton,Crystal Palace,15:00,Sun (05 Oct),2.5,3.2,2.9,Football / England / Premier League,Match Result,4.75,4.33,SuperSportBET
+Brentford,Manchester City,15:00,Sun (05 Oct),4.75,4.33,1.62,Football / England / Premier League,Match Result,,,SuperSportBET
