@@ -485,6 +485,160 @@ def main():
         
         st.markdown("---")
         
+        # Real Data Analysis Section
+        st.subheader("🔍 Arbitrage Analysis of Your Data")
+        
+        with st.expander("**Analyze All Matches - Click to See Detailed Breakdown**", expanded=True):
+            st.markdown("This section analyzes every match in your data to show whether arbitrage opportunities exist.")
+            
+            # Group matches and analyze each one
+            matches = df.groupby(['normalized_home', 'normalized_away', 'date'])
+            
+            analysis_data = []
+            
+            for (home, away, date), group in matches:
+                # Get best odds for each outcome
+                best_home_row = group.loc[group['odds_home'].idxmax()]
+                best_draw_row = group.loc[group['odds_draw'].idxmax()]
+                best_away_row = group.loc[group['odds_away'].idxmax()]
+                
+                best_home_odds = best_home_row['odds_home']
+                best_draw_odds = best_draw_row['odds_draw']
+                best_away_odds = best_away_row['odds_away']
+                
+                # Calculate arbitrage
+                implied_prob_home = 1 / best_home_odds
+                implied_prob_draw = 1 / best_draw_odds
+                implied_prob_away = 1 / best_away_odds
+                total_implied_prob = implied_prob_home + implied_prob_draw + implied_prob_away
+                
+                arbitrage_pct = total_implied_prob * 100
+                profit_margin = (1/total_implied_prob - 1) * 100 if total_implied_prob < 1 else 0
+                is_arbitrage = total_implied_prob < 1.0
+                
+                analysis_data.append({
+                    'match': f"{best_home_row['home_team']} vs {best_away_row['away_team']}",
+                    'date': date,
+                    'home_team': best_home_row['home_team'],
+                    'away_team': best_away_row['away_team'],
+                    'bookmakers': len(group),
+                    'best_home_odds': best_home_odds,
+                    'home_source': best_home_row['source'],
+                    'best_draw_odds': best_draw_odds,
+                    'draw_source': best_draw_row['source'],
+                    'best_away_odds': best_away_odds,
+                    'away_source': best_away_row['source'],
+                    'implied_prob_home': implied_prob_home * 100,
+                    'implied_prob_draw': implied_prob_draw * 100,
+                    'implied_prob_away': implied_prob_away * 100,
+                    'total_implied_prob': arbitrage_pct,
+                    'profit_margin': profit_margin,
+                    'is_arbitrage': is_arbitrage
+                })
+            
+            # Sort by profit margin (arbitrage opportunities first)
+            analysis_data.sort(key=lambda x: x['profit_margin'], reverse=True)
+            
+            # Summary statistics
+            total_matches = len(analysis_data)
+            arb_matches = sum(1 for a in analysis_data if a['is_arbitrage'])
+            
+            col1, col2, col3 = st.columns(3)
+            col1.metric("Total Unique Matches", total_matches)
+            col2.metric("Arbitrage Opportunities", arb_matches, delta=f"{(arb_matches/total_matches*100):.1f}%" if total_matches > 0 else "0%")
+            col3.metric("Regular Matches (No Arb)", total_matches - arb_matches)
+            
+            st.markdown("---")
+            
+            # Display each match analysis
+            for i, analysis in enumerate(analysis_data, 1):
+                if analysis['is_arbitrage']:
+                    header_color = "🟢"
+                    status = "ARBITRAGE OPPORTUNITY"
+                else:
+                    header_color = "🔴"
+                    status = "NO ARBITRAGE"
+                
+                with st.expander(f"{header_color} **{analysis['match']}** ({analysis['date']}) - {status}"):
+                    st.markdown(f"**Match has {analysis['bookmakers']} bookmaker(s) offering odds**")
+                    
+                    # Show best odds from each bookmaker
+                    st.markdown("##### Best Odds Available:")
+                    col1, col2, col3 = st.columns(3)
+                    
+                    with col1:
+                        st.info(f"**🏠 {analysis['home_team']} Win**\n\n"
+                               f"Best Odds: **{analysis['best_home_odds']}**\n\n"
+                               f"Source: {analysis['home_source']}\n\n"
+                               f"Implied Probability: {analysis['implied_prob_home']:.2f}%")
+                    
+                    with col2:
+                        st.info(f"**🤝 Draw**\n\n"
+                               f"Best Odds: **{analysis['best_draw_odds']}**\n\n"
+                               f"Source: {analysis['draw_source']}\n\n"
+                               f"Implied Probability: {analysis['implied_prob_draw']:.2f}%")
+                    
+                    with col3:
+                        st.info(f"**✈️ {analysis['away_team']} Win**\n\n"
+                               f"Best Odds: **{analysis['best_away_odds']}**\n\n"
+                               f"Source: {analysis['away_source']}\n\n"
+                               f"Implied Probability: {analysis['implied_prob_away']:.2f}%")
+                    
+                    st.markdown("---")
+                    st.markdown("##### Arbitrage Calculation:")
+                    
+                    # Show the calculation
+                    st.code(f"""
+Step 1: Calculate Implied Probabilities
+  Home: 1 ÷ {analysis['best_home_odds']} = {analysis['implied_prob_home']:.4f}% 
+  Draw: 1 ÷ {analysis['best_draw_odds']} = {analysis['implied_prob_draw']:.4f}%
+  Away: 1 ÷ {analysis['best_away_odds']} = {analysis['implied_prob_away']:.4f}%
+
+Step 2: Sum Total Implied Probability
+  Total = {analysis['implied_prob_home']:.2f}% + {analysis['implied_prob_draw']:.2f}% + {analysis['implied_prob_away']:.2f}%
+  Total = {analysis['total_implied_prob']:.2f}%
+
+Step 3: Check for Arbitrage
+  {analysis['total_implied_prob']:.2f}% {'<' if analysis['is_arbitrage'] else '>'} 100%
+  Result: {'✅ ARBITRAGE EXISTS!' if analysis['is_arbitrage'] else '❌ No arbitrage (bookmaker margin)'}
+  
+  {'Profit Margin: ' + f"{analysis['profit_margin']:.2f}%" if analysis['is_arbitrage'] else 'Bookmaker Margin: ' + f"{analysis['total_implied_prob'] - 100:.2f}%"}
+                    """)
+                    
+                    if analysis['is_arbitrage']:
+                        # Calculate stake distribution
+                        total_stake = 1000
+                        stake_home = total_stake / (analysis['best_home_odds'] * (analysis['total_implied_prob']/100))
+                        stake_draw = total_stake / (analysis['best_draw_odds'] * (analysis['total_implied_prob']/100))
+                        stake_away = total_stake / (analysis['best_away_odds'] * (analysis['total_implied_prob']/100))
+                        guaranteed_return = stake_home * analysis['best_home_odds']
+                        profit = guaranteed_return - total_stake
+                        
+                        st.success(f"""
+**💰 Profit Opportunity:**
+
+For a R1,000 total investment:
+- Bet R{stake_home:.2f} on {analysis['home_team']} at {analysis['home_source']}
+- Bet R{stake_draw:.2f} on Draw at {analysis['draw_source']}
+- Bet R{stake_away:.2f} on {analysis['away_team']} at {analysis['away_source']}
+
+**Guaranteed Return: R{guaranteed_return:.2f}**
+**Guaranteed Profit: R{profit:.2f}**
+**ROI: {analysis['profit_margin']:.2f}%**
+                        """)
+                    else:
+                        st.warning(f"""
+**Why No Arbitrage?**
+
+The total implied probability ({analysis['total_implied_prob']:.2f}%) is greater than 100%, 
+meaning the bookmakers have built in a {analysis['total_implied_prob'] - 100:.2f}% margin.
+
+This is the normal situation - bookmakers price their odds to guarantee themselves profit.
+To find arbitrage, we need the combined best odds to total less than 100%.
+                        """)
+        
+        st.markdown("---")
+        
         col1, col2 = st.columns(2)
         
         with col1:
