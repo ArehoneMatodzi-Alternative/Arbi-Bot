@@ -1,38 +1,43 @@
 name: Run Scrapers and Update Data
 
+# Trigger workflow every minute and allow manual runs
 on:
   schedule:
-    - cron: "*/1 * * * *"   # runs every 1 minute
-  workflow_dispatch:        # allows manual triggering
-
+    - cron: "*/1 * * * *"   # every minute
+  workflow_dispatch:         # allows manual triggering
 
 jobs:
   run-scrapers:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repo
+      # 1️⃣ Checkout the repo
+      - name: Checkout repository
         uses: actions/checkout@v3
 
+      # 2️⃣ Set up Python
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: "3.10"
 
+      # 3️⃣ Install dependencies
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          # optional if playwright is used:
+          # optional if you use Playwright
           playwright install --with-deps
 
+      # 4️⃣ Run scraper scripts
       - name: Run scraping scripts
         run: |
           python supersport_scraper.py
           python sunbet_scraper.py
           python betjets_scraper.py
 
-      - name: Commit and push results
+      # 5️⃣ Commit and push updated data
+      - name: Commit and push updated data
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
