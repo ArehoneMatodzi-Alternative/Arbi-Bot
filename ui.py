@@ -18,10 +18,6 @@ FILES = {
     "SunBet": {
         "csv": os.path.join(OUT_DIR, "sunbet_premier.csv"),
         "json": os.path.join(OUT_DIR, "sunbet_premier.json")
-    },
-    "Betjets": {
-        "csv": os.path.join(OUT_DIR, "betjets_epl.csv"),
-        "json": os.path.join(OUT_DIR, "betjets_epl.json")
     }
 }
 
@@ -299,4 +295,5 @@ def main():
     """.format(datetime.now().strftime("%Y-%m-%d %H:%M:%S")), unsafe_allow_html=True)
 
 if __name__ == "__main__":
+
     main()
