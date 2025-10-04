@@ -143,7 +143,6 @@ def main():
         Run these scripts to collect data:
         1. `python supersport_scraper.py`
         2. `python sunbet_scraper.py`
-        3. `python betjets_scraper.py`
         """)
         return
     
@@ -297,3 +296,4 @@ def main():
 if __name__ == "__main__":
 
     main()
+
