@@ -318,6 +318,173 @@ def main():
     with tab3:
         st.header("Statistics & Insights")
         
+        # Arbitrage Calculation Explanation Section
+        st.subheader("📚 Understanding Arbitrage Betting")
+        
+        with st.expander("**How Arbitrage Works - Click to Learn**", expanded=False):
+            st.markdown("""
+            ### What is Arbitrage Betting?
+            
+            Arbitrage betting (also called "sure betting" or "arbing") is a strategy that guarantees profit by placing bets 
+            on all possible outcomes of an event across different bookmakers. This works when bookmakers disagree on the 
+            odds, creating a mathematical opportunity for guaranteed profit.
+            
+            ---
+            
+            ### The Mathematics Behind It
+            
+            #### 1. **Implied Probability**
+            When a bookmaker offers odds, they're expressing the probability of an outcome. For example:
+            - Odds of 2.00 = 50% implied probability (1 ÷ 2.00 = 0.50)
+            - Odds of 3.00 = 33.33% implied probability (1 ÷ 3.00 = 0.333)
+            
+            #### 2. **The Arbitrage Formula**
+            For a 3-way market (Home/Draw/Away), we calculate:
+            
+            ```
+            Arbitrage % = (1/Odds_Home + 1/Odds_Draw + 1/Odds_Away) × 100
+            ```
+            
+            - **If < 100%**: Arbitrage opportunity exists! ✅
+            - **If = 100%**: Break-even (no profit, no loss)
+            - **If > 100%**: Bookmaker has built-in margin (normal situation)
+            
+            #### 3. **Profit Margin Calculation**
+            
+            ```
+            Profit Margin % = (1 / Arbitrage% - 1) × 100
+            ```
+            
+            ---
+            
+            ### Example Calculation
+            """)
+            
+            st.markdown("#### **Scenario: Manchester United vs Liverpool**")
+            
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.info("**Home Win (Man Utd)**\n\nBookmaker A: 2.10")
+            with col2:
+                st.info("**Draw**\n\nBookmaker B: 3.80")
+            with col3:
+                st.info("**Away Win (Liverpool)**\n\nBookmaker C: 4.20")
+            
+            # Calculate the example
+            ex_home, ex_draw, ex_away = 2.10, 3.80, 4.20
+            ex_arb = (1/ex_home + 1/ex_draw + 1/ex_away)
+            ex_profit_margin = (1/ex_arb - 1) * 100
+            
+            st.markdown(f"""
+            #### **Step-by-Step Calculation:**
+            
+            **Step 1:** Calculate implied probabilities
+            ```
+            Home: 1 ÷ 2.10 = 0.4762 (47.62%)
+            Draw: 1 ÷ 3.80 = 0.2632 (26.32%)
+            Away: 1 ÷ 4.20 = 0.2381 (23.81%)
+            ```
+            
+            **Step 2:** Sum the implied probabilities
+            ```
+            Total = 0.4762 + 0.2632 + 0.2381 = 0.9775 (97.75%)
+            ```
+            
+            **Step 3:** Check if arbitrage exists
+            ```
+            97.75% < 100% ✅ YES! Arbitrage opportunity exists!
+            ```
+            
+            **Step 4:** Calculate profit margin
+            ```
+            Profit Margin = (1 ÷ 0.9775 - 1) × 100 = {ex_profit_margin:.2f}%
+            ```
+            
+            ---
+            
+            ### How to Split Your Stakes
+            
+            For a **R1,000 total investment**, calculate each stake as:
+            
+            ```
+            Stake_Outcome = Total_Investment ÷ (Odds_Outcome × Total_Implied_Probability)
+            ```
+            """)
+            
+            total_stake = 1000
+            stake_home = total_stake / (ex_home * ex_arb)
+            stake_draw = total_stake / (ex_draw * ex_arb)
+            stake_away = total_stake / (ex_away * ex_arb)
+            guaranteed_return = stake_home * ex_home
+            profit = guaranteed_return - total_stake
+            
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.success(f"""
+                **Bet on Man Utd Win**
+                - Stake: R{stake_home:.2f}
+                - At odds: 2.10
+                - Returns: R{stake_home * ex_home:.2f}
+                """)
+            with col2:
+                st.success(f"""
+                **Bet on Draw**
+                - Stake: R{stake_draw:.2f}
+                - At odds: 3.80
+                - Returns: R{stake_draw * ex_draw:.2f}
+                """)
+            with col3:
+                st.success(f"""
+                **Bet on Liverpool Win**
+                - Stake: R{stake_away:.2f}
+                - At odds: 4.20
+                - Returns: R{stake_away * ex_away:.2f}
+                """)
+            
+            st.markdown(f"""
+            ### **Final Result:**
+            
+            - **Total Staked:** R{total_stake:.2f}
+            - **Guaranteed Return:** R{guaranteed_return:.2f} (regardless of match outcome)
+            - **Guaranteed Profit:** R{profit:.2f}
+            - **ROI:** {ex_profit_margin:.2f}%
+            
+            ---
+            
+            ### Why Does This Work?
+            
+            Different bookmakers:
+            1. Have different opinions on match outcomes
+            2. Target different customer segments
+            3. Update their odds at different times
+            4. Use different risk management strategies
+            
+            By finding the **best odds for each outcome across multiple bookmakers**, you can sometimes create a situation 
+            where the combined implied probability is less than 100%, guaranteeing profit!
+            
+            ---
+            
+            ### Important Notes
+            
+            ⚠️ **Challenges in Real-World Arbitrage:**
+            - Odds change rapidly - opportunities may disappear quickly
+            - Bookmakers may limit or ban accounts that consistently arb
+            - Need accounts with multiple bookmakers
+            - Must place bets simultaneously to lock in odds
+            - Betting limits may prevent large stakes
+            - Account verification and withdrawal times vary
+            
+            ✅ **Best Practices:**
+            - Act quickly when opportunities arise
+            - Use reliable, licensed bookmakers
+            - Keep accounts funded for fast execution
+            - Calculate stakes accurately
+            - Verify odds before placing bets
+            - Track all bets carefully
+            """)
+        
+        st.markdown("---")
+        
         col1, col2 = st.columns(2)
         
         with col1:
