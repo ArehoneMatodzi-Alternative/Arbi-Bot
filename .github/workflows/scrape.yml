@@ -3,7 +3,7 @@ name: Run Scrapers and Update Data
 # Trigger workflow every minute and allow manual runs
 on:
   schedule:
-    - cron: "*/1 * * * *"   # every minute
+    - cron: "*/* * 1 * *"   # every minute
   workflow_dispatch:         # allows manual triggering
 
 jobs:
