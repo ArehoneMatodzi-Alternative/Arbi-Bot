@@ -1,0 +1,6 @@
+streamlit
+pandas
+numpy
+playwright
+beautifulsoup4
+requests
