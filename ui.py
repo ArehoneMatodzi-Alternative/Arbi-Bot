@@ -6,8 +6,23 @@ from datetime import datetime
 from typing import List, Dict, Tuple
 import re
 
-# Configuration
-OUT_DIR = r"C:\Users\User\Downloads\Arbitrage Website\output"
+# Configuration - Try multiple possible locations
+POSSIBLE_DIRS = [
+    r"C:\Users\User\Downloads\Arbitrage Website\output",
+    "output",
+    "./output",
+    "../output",
+    os.path.join(os.getcwd(), "output"),
+]
+
+def find_output_dir():
+    """Find the first valid output directory."""
+    for directory in POSSIBLE_DIRS:
+        if os.path.exists(directory):
+            return directory
+    return POSSIBLE_DIRS[0]  # Default to first option
+
+OUT_DIR = find_output_dir()
 
 # File paths for all three sites
 FILES = {
@@ -18,6 +33,10 @@ FILES = {
     "SunBet": {
         "csv": os.path.join(OUT_DIR, "sunbet_premier.csv"),
         "json": os.path.join(OUT_DIR, "sunbet_premier.json")
+    },
+    "Betjets": {
+        "csv": os.path.join(OUT_DIR, "betjets_epl.csv"),
+        "json": os.path.join(OUT_DIR, "betjets_epl.json")
     }
 }
 
@@ -47,16 +66,34 @@ def normalize_team_name(team: str) -> str:
 def load_data() -> pd.DataFrame:
     """Load and combine data from all three sites."""
     dfs = []
+    found_files = []
+    missing_files = []
     
     for site, paths in FILES.items():
         if os.path.exists(paths["csv"]):
             try:
                 df = pd.read_csv(paths["csv"])
-                df['normalized_home'] = df['home_team'].apply(normalize_team_name)
-                df['normalized_away'] = df['away_team'].apply(normalize_team_name)
-                dfs.append(df)
+                if not df.empty:
+                    df['normalized_home'] = df['home_team'].apply(normalize_team_name)
+                    df['normalized_away'] = df['away_team'].apply(normalize_team_name)
+                    dfs.append(df)
+                    found_files.append(f"{site}: {len(df)} matches")
+                else:
+                    missing_files.append(f"{site}: File exists but empty")
             except Exception as e:
-                st.warning(f"Error loading {site}: {e}")
+                missing_files.append(f"{site}: Error - {e}")
+        else:
+            missing_files.append(f"{site}: File not found at {paths['csv']}")
+    
+    # Show status in sidebar
+    if found_files:
+        st.sidebar.success(f"✅ Loaded {len(found_files)} source(s)")
+        for f in found_files:
+            st.sidebar.text(f)
+    if missing_files:
+        st.sidebar.warning(f"⚠️ Missing {len(missing_files)} source(s)")
+        for f in missing_files:
+            st.sidebar.text(f)
     
     if dfs:
         return pd.concat(dfs, ignore_index=True)
@@ -133,17 +170,40 @@ def main():
     st.title("⚽ Premier League Arbitrage Betting Analyzer")
     st.markdown("---")
     
+    # Show current output directory
+    st.sidebar.info(f"📁 Output Directory:\n`{OUT_DIR}`")
+    
     # Load data
     with st.spinner("Loading betting data..."):
         df = load_data()
     
     if df.empty:
-        st.error("No data found. Please run the scraping scripts first.")
+        st.error("❌ No data found or all files are empty.")
+        
+        st.warning("**Checking file locations...**")
+        
+        # Show which files exist
+        st.write("**File Status:**")
+        for site, paths in FILES.items():
+            exists = os.path.exists(paths["csv"])
+            icon = "✅" if exists else "❌"
+            st.write(f"{icon} {site}: `{paths['csv']}`")
+            if exists:
+                try:
+                    test_df = pd.read_csv(paths["csv"])
+                    st.write(f"   → Contains {len(test_df)} rows")
+                except Exception as e:
+                    st.write(f"   → Error reading: {e}")
+        
         st.info("""
-        Run these scripts to collect data:
-        1. `python supersport_scraper.py`
-        2. `python sunbet_scraper.py`
-        """)
+        **To fix this:**
+        1. Make sure you've run the scraping scripts
+        2. Check that CSV files exist in the output folder
+        3. Verify the output path matches: `{}`
+        
+        **Or manually set the path:**
+        Update `OUT_DIR` in the script to point to your output folder.
+        """.format(OUT_DIR))
         return
     
     # Sidebar filters
@@ -294,6 +354,4 @@ def main():
     """.format(datetime.now().strftime("%Y-%m-%d %H:%M:%S")), unsafe_allow_html=True)
 
 if __name__ == "__main__":
-
     main()
-
