@@ -15,6 +15,8 @@ from playwright.sync_api import sync_playwright, TimeoutError as PWTimeout
 import os
 from pathlib import Path
 
+URL = "https://betjets.co.za/en/sports/soccer/england/epl/1195"  # starting with this page
+
 # write inside the repo by default
 OUT_DIR = Path(os.getenv("OUT_DIR", "output"))
 CSV_PATH = OUT_DIR / "betjets_epl.csv"
@@ -268,5 +270,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
