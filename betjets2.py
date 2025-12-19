@@ -1,102 +1,103 @@
-# scrape BetJets EPL and write csv + json 
-# For betjets only (at least for now)
-# create a virtual environment and activate it
-# run this to install the libraries : pip install requests beautifulsoup4 pandas playwright
-# run this: playwright install
-# Now you can run this file, it should output a data folder with both csv and json
+# betjets_scraper.py
+# Scrape BetJets EPL 1X2 odds -> output/betjets_epl.csv + output/betjets_epl.json
+# CI-friendly Playwright scraper with retries + debug artifacts.
 
+from __future__ import annotations
 
-import os, re, json, csv, time
-from contextlib import contextmanager
-from datetime import datetime
-from typing import List, Dict, Optional, Tuple
-from urllib.parse import urlparse
-from playwright.sync_api import sync_playwright, TimeoutError as PWTimeout
+import csv
+import json
 import os
+import re
+import time
+from dataclasses import dataclass, asdict
+from datetime import datetime
 from pathlib import Path
+from typing import List, Optional, Tuple
+from urllib.parse import urlparse
 
-URL = "https://betjets.co.za/en/sports/soccer/england/epl/1195"  # starting with this page
+from playwright.sync_api import sync_playwright, TimeoutError as PWTimeout
 
-# write inside the repo by default
+URL = os.getenv("BETJETS_URL", "https://betjets.co.za/en/sports/soccer/england/epl/1195")
+
 OUT_DIR = Path(os.getenv("OUT_DIR", "output"))
 CSV_PATH = OUT_DIR / "betjets_epl.csv"
 JSON_PATH = OUT_DIR / "betjets_epl.json"
 
+# Odds: allow 1.22 / 10.75 etc.
+RE_ODD = re.compile(r"\b(\d{1,2}\.\d{1,2})\b")
+RE_DATEBAR = re.compile(r"^(\d{2})/(\d{2})/(\d{4})$")  # 03/10/2025
+RE_TIME_AMPM = re.compile(r"^([1-9]|1[0-2]):([0-5]\d)\s?(AM|PM)$", re.I)
+RE_TIME_24 = re.compile(r"^([01]?\d|2[0-3]):([0-5]\d)$")
 
-# odds (2 decimals), date bars, and times
-re_price = re.compile(r"\b(\d{1,2}\.\d{2})\b")
-re_datebar = re.compile(r"^(\d{2})/(\d{2})/(\d{4})$")                         # 03/10/2025
-re_time_ampm = re.compile(r"^([1-9]|1[0-2]):([0-5]\d)\s?(AM|PM)$", re.I)     # 9:00 PM
-re_time_24   = re.compile(r"^([01]?\d|2[0-3]):([0-5]\d)$")                   # 21:00
+COOKIE_SELECTORS = [
+    "button:has-text('Accept')",
+    "button:has-text('Accept all')",
+    "button:has-text('I agree')",
+    "button:has-text('Allow all')",
+    "button:has-text('AGREE')",
+    "text=Accept",
+]
+
+READY_SIGNALS = [
+    "text=/Match Result/i",
+    "text=/1X2/i",
+    "text=/Premier League/i",
+    "text=/EPL/i",
+]
+
+BLOCK_SIGNALS = [
+    "text=/access denied/i",
+    "text=/not available/i",
+    "text=/restricted/i",
+    "text=/verify/i",
+    "text=/captcha/i",
+    "text=/unusual traffic/i",
+]
 
 
+@dataclass
+class Row:
+    home_team: str
+    away_team: str
+    start_time: str          # "14:30"
+    date: str                # "Sat (19 Dec)" etc.
+    odds_home: float
+    odds_draw: float
+    odds_away: float
+    category: str            # Soccer / England / Premier League
+    market: str              # Match Result
+    source: str              # Betjets
 
-@contextmanager
-def launch(headless: bool = True):
-    with sync_playwright() as p:
-        b = p.chromium.launch(headless=headless)
-        try:
-            yield b
-        finally:
-            b.close()
 
 def brand_from_url(url: str) -> str:
-    # site name from hostname
     host = (urlparse(url).hostname or "").replace("www.", "")
     root = host.split(".")[0] if host else ""
     return root.capitalize() if root else "Unknown"
 
-def token_name(tok: str) -> str:
-    # map short codes → nice names
-    t = tok.strip().lower().replace("-", " ").replace("_", " ")
-    if t in {"epl", "premier league"}: return "Premier League"
-    if t == "football": return "Football"
-    if t == "soccer": return "Soccer"
-    if t == "england" or t == "english": return "England"
-    return t.title()
 
 def category_from_url(url: str) -> str:
-    # /sports/football/england/epl/1195 → Football / England / Premier League
+    # /en/sports/soccer/england/epl/1195 -> Soccer / England / Premier League
     parts = [p for p in urlparse(url).path.split("/") if p]
     if "sports" in parts:
-        parts = parts[parts.index("sports")+1:]
+        parts = parts[parts.index("sports") + 1 :]
     if parts and parts[-1].isdigit():
         parts = parts[:-1]
+
+    def token_name(tok: str) -> str:
+        t = tok.strip().lower().replace("-", " ").replace("_", " ")
+        if t in {"epl", "premier league"}:
+            return "Premier League"
+        if t == "football":
+            return "Football"
+        if t == "soccer":
+            return "Soccer"
+        if t in {"england", "english"}:
+            return "England"
+        return t.title()
+
     good = [token_name(p) for p in parts[:3]]
-    return " / ".join(good)
+    return " / ".join(good) if good else "Soccer / England / Premier League"
 
-def category_from_text(lines: List[str], url: str) -> str:
-    # try breadcrumbs/headers first, then fallback to URL
-    sport = None
-    country = None
-    league = None
-    for s in lines[:150]:
-        low = s.lower()
-        if not sport and ("soccer" in low or "football" in low):
-            sport = "Soccer" if "soccer" in low else "Football"
-        if not country and ("england" in low or "english" in low):
-            country = "England"
-        if not league and (low == "epl" or "premier league" in low):
-            league = "Premier League"
-        if sport and country and league:
-            break
-    # URL fallback for anything missing
-    if not (sport and country and league):
-        from_url = category_from_url(url).split(" / ")
-        if not sport and len(from_url) > 0: sport = from_url[0]
-        if not country and len(from_url) > 1: country = from_url[1]
-        if not league and len(from_url) > 2: league = from_url[2]
-    parts = [p for p in [sport, country, league] if p]
-    return " / ".join(parts) if parts else category_from_url(url)
-
-def detect_market(lines: List[str]) -> str:
-    # prefer the label shown on the page
-    for s in lines[:200]:
-        if "match result" in s.lower():
-            return "Match Result"
-        if s.strip().lower() == "1x2":
-            return "1X2"
-    return "Match Result"
 
 def ampm_to_24(h: int, m: int, ampm: str) -> str:
     a = ampm.upper()
@@ -106,170 +107,288 @@ def ampm_to_24(h: int, m: int, ampm: str) -> str:
         h24 = 12 if h == 12 else h + 12
     return f"{h24:02d}:{m:02d}"
 
+
 def is_team(s: str) -> bool:
-    return bool(re.fullmatch(r"[A-Za-z0-9'.\-&/]+(?:\s+[A-Za-z0-9'.\-&/]+){0,3}", s)) and 2 <= len(s) <= 40
+    # Team tokens up to 4 words, allow punctuation
+    return bool(re.fullmatch(r"[A-Za-z0-9'.\-&/]+(?:\s+[A-Za-z0-9'.\-&/]+){0,4}", s)) and 2 <= len(s) <= 40
 
-def skip_word(s: str) -> bool:
-    s2 = s.lower()
-    junk = {
-        "games","outrights","match result","total goals","o/u","over","under",
-        "home","draw","away","events","live","specials","settings","betslip",
-        "+197","+194"
+
+def is_noise(s: str) -> bool:
+    low = s.strip().lower()
+    bad = {
+        "games", "outrights", "events", "live", "specials", "settings", "betslip",
+        "match result", "total goals", "over", "under", "draw no bet", "double chance",
+        "home", "draw", "away", "1", "x", "2",
     }
-    return s2 in junk or s2 in {"1","x","2"}
+    return low in bad
 
-# fetching + parsing 
 
-def open_page(headless: bool = True) -> Tuple[str, str]:
-    # returns (visible_text, final_url)
-    os.makedirs(OUT_DIR, exist_ok=True)
-    with launch(headless=headless) as b:
-        ctx = b.new_context(
-            viewport={"width": 1366, "height": 960},
-            locale="en-ZA",
-            user_agent=("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-                        "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"),
-        )
-        page = ctx.new_page()
-        page.set_default_timeout(10000000)
-        page.goto(URL, wait_until="networkidle")  # or "load"
-        page.wait_for_selector("text=Match Result", timeout=15000)
+def save_debug(page, tag: str = "betjets") -> None:
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
+    try:
+        page.screenshot(path=str(OUT_DIR / f"{tag}_debug.png"), full_page=True)
+    except Exception:
+        pass
+    try:
+        (OUT_DIR / f"{tag}_debug.html").write_text(page.content(), encoding="utf-8")
+    except Exception:
+        pass
+    try:
+        (OUT_DIR / f"{tag}_debug.txt").write_text(page.locator("body").inner_text(), encoding="utf-8")
+    except Exception:
+        pass
 
-        for sel in ["button:has-text('Accept')", "text=Accept"]:
+
+def click_cookies(page) -> None:
+    for sel in COOKIE_SELECTORS:
+        try:
+            page.locator(sel).first.click(timeout=1200)
+            return
+        except Exception:
+            pass
+
+
+def looks_blocked(page) -> bool:
+    for sel in BLOCK_SIGNALS:
+        try:
+            if page.locator(sel).first.is_visible(timeout=500):
+                return True
+        except Exception:
+            pass
+    # also: if body has almost no text
+    try:
+        t = page.locator("body").inner_text(timeout=1500)
+        if len(t.strip()) < 200:
+            return True
+    except Exception:
+        pass
+    return False
+
+
+def wait_until_ready(page, timeout_ms: int = 90000) -> None:
+    page.wait_for_load_state("domcontentloaded", timeout=timeout_ms)
+
+    start = time.time()
+    while (time.time() - start) * 1000 < timeout_ms:
+        click_cookies(page)
+
+        # any visible “ready” signal
+        for sel in READY_SIGNALS:
             try:
-                page.locator(sel).first.click(timeout=1500); break
+                if page.locator(sel).first.is_visible(timeout=500):
+                    return
             except Exception:
                 pass
-        flat, last_h = 0, 0
-        for _ in range(240):
-            page.mouse.wheel(0, 1800)
-            page.wait_for_timeout(250)
-            try: h = page.evaluate("document.body.scrollHeight")
-            except Exception: h = 0
-            if h == last_h:
-                flat += 1
-                if flat >= 6: break
-            else:
-                flat = 0
-            last_h = h
-        try:
-            txt = page.locator("body").inner_text(timeout=5000)
-        except PWTimeout:
-            txt = page.content()
-        final_url = page.url
-        ctx.close()
-        return txt, final_url
 
-def parse_epl(txt: str, page_url: str) -> List[Dict]:
+        # odds present in body text is also a good signal
+        try:
+            txt = page.locator("body").inner_text(timeout=1500)
+            if RE_ODD.search(txt):
+                return
+        except Exception:
+            pass
+
+        page.wait_for_timeout(500)
+
+    # Don’t hard-fail here: continue and let parsing attempt happen
+    print("WARN: Ready signals not found before timeout; continuing.")
+
+
+def scroll_to_load(page, max_scrolls: int = 220) -> None:
+    flat = 0
+    last_h = 0
+    for _ in range(max_scrolls):
+        page.mouse.wheel(0, 1800)
+        page.wait_for_timeout(250)
+        try:
+            h = page.evaluate("document.body.scrollHeight")
+        except Exception:
+            h = 0
+        if h == last_h:
+            flat += 1
+            if flat >= 7:
+                break
+        else:
+            flat = 0
+        last_h = h
+
+
+def open_page_text(url: str, headless: bool = True) -> Tuple[str, str]:
+    last_err: Optional[Exception] = None
+
+    for attempt in range(3):
+        try:
+            with sync_playwright() as p:
+                browser = p.chromium.launch(headless=headless)
+                ctx = browser.new_context(
+                    viewport={"width": 1366, "height": 960},
+                    locale="en-ZA",
+                    timezone_id="Africa/Johannesburg",
+                    user_agent=(
+                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                        "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+                    ),
+                )
+                page = ctx.new_page()
+                page.set_default_timeout(60000)
+
+                page.goto(url, wait_until="domcontentloaded", timeout=60000)
+                click_cookies(page)
+
+                wait_until_ready(page, timeout_ms=90000)
+
+                if looks_blocked(page):
+                    save_debug(page, tag="betjets_blocked")
+                    raise RuntimeError("BetJets looks blocked / not rendering on this runner.")
+
+                scroll_to_load(page)
+                click_cookies(page)
+
+                # Pull visible text; this is what you successfully parse locally
+                txt = page.locator("body").inner_text(timeout=8000)
+                final_url = page.url
+
+                ctx.close()
+                browser.close()
+                return txt, final_url
+
+        except Exception as e:
+            last_err = e
+            print(f"WARN: open attempt {attempt+1}/3 failed: {e}")
+            time.sleep(2)
+
+    raise last_err if last_err else RuntimeError("Unknown failure opening BetJets")
+
+
+def parse_rows(txt: str, page_url: str) -> List[Row]:
     lines = [x.strip() for x in txt.splitlines() if x.strip()]
     source = brand_from_url(page_url)
-    category = category_from_text(lines, page_url)
-    market = detect_market(lines)
+    category = category_from_url(page_url)
+    market = "Match Result"
 
-    n, i = len(lines), 0
-    out: List[Dict] = []
+    out: List[Row] = []
     current_date: Optional[datetime] = None
 
-    while i < n:
-        line = lines[i]
+    i = 0
+    n = len(lines)
 
-        # date bar like 03/10/2025
-        md = re_datebar.match(line)
+    while i < n:
+        s = lines[i]
+
+        md = RE_DATEBAR.match(s)
         if md:
             dd, mm, yy = int(md.group(1)), int(md.group(2)), int(md.group(3))
-            try: current_date = datetime(yy, mm, dd)
-            except ValueError: current_date = None
+            try:
+                current_date = datetime(yy, mm, dd)
+            except ValueError:
+                current_date = None
             i += 1
             continue
 
-        # time: 9:00 PM or 21:00
-        mt12 = re_time_ampm.match(line)
-        mt24 = re_time_24.match(line) if not mt12 else None
+        mt12 = RE_TIME_AMPM.match(s)
+        mt24 = RE_TIME_24.match(s) if not mt12 else None
+
         if mt12 or mt24:
             if mt12:
-                hh = int(mt12.group(1)); mn = int(mt12.group(2)); ampm = mt12.group(3)
-                start_time = ampm_to_24(hh, mn, ampm)
+                start_time = ampm_to_24(int(mt12.group(1)), int(mt12.group(2)), mt12.group(3))
             else:
                 start_time = f"{int(mt24.group(1)):02d}:{int(mt24.group(2)):02d}"
 
             j = i + 1
 
-            # teams after time
-            home, away = "", ""
+            home = ""
             while j < n and not home:
-                s = lines[j]
-                if not skip_word(s) and is_team(s): home = s
+                t = lines[j]
+                if not is_noise(t) and is_team(t):
+                    home = t
                 j += 1
+
+            away = ""
             while j < n and not away:
-                s = lines[j]
-                if not skip_word(s) and is_team(s): away = s
+                t = lines[j]
+                if not is_noise(t) and is_team(t):
+                    away = t
                 j += 1
 
-            if not (home and away and home.lower() != away.lower()):
-                i = j; continue
+            if not (home and away) or home.lower() == away.lower():
+                i = j
+                continue
 
-            # odds near teams
-            window = " ".join(lines[j:min(n, j + 40)])
-            prices = re_price.findall(window)
-            if len(prices) < 3:
-                i = j; continue
+            window = " ".join(lines[j : min(n, j + 50)])
+            odds = RE_ODD.findall(window)
 
-            odds_home = float(prices[0])
-            odds_draw = float(prices[1])
-            odds_away = float(prices[2])
-            over  = float(prices[3]) if len(prices) > 3 else ""
-            under = float(prices[4]) if len(prices) > 4 else ""
+            # We need 3 odds for 1X2
+            if len(odds) < 3:
+                i = j
+                continue
 
-            format_date = (current_date.strftime("%a (%d %b)")
-                           if current_date else datetime.now().strftime("%a (%d %b)"))
+            date_str = (current_date.strftime("%a (%d %b)") if current_date else datetime.now().strftime("%a (%d %b)"))
 
-            out.append({
-                "home_team": home,
-                "away_team": away,
-                "start_time": start_time,
-                "date":  format_date,
-                "odds_home": odds_home,
-                "odds_draw": odds_draw,
-                "odds_away": odds_away,
-                "category": category,
-                "market": market,
-                "over": over,
-                "under": under,
-                "source": source,
-            })
+            try:
+                out.append(
+                    Row(
+                        home_team=home,
+                        away_team=away,
+                        start_time=start_time,
+                        date=date_str,
+                        odds_home=float(odds[0]),
+                        odds_draw=float(odds[1]),
+                        odds_away=float(odds[2]),
+                        category=category,
+                        market=market,
+                        source=source,
+                    )
+                )
+            except Exception:
+                pass
 
             i = j
             continue
 
         i += 1
 
-    # dedupe
-    seen, rows = set(), []
+    # dedupe by match + time + date
+    seen = set()
+    deduped: List[Row] = []
     for r in out:
-        key = (r["home_team"].lower(), r["away_team"].lower(), r["date"], r["start_time"])
+        key = (r.home_team.lower(), r.away_team.lower(), r.date, r.start_time)
         if key not in seen:
-            seen.add(key); rows.append(r)
-    return rows
+            seen.add(key)
+            deduped.append(r)
+    return deduped
 
-def write_files(rows: List[Dict]):
-    cols = ["home_team","away_team","start_time","date",
-            "odds_home","odds_draw","odds_away",
-            "category","market","over","under","source"]
-    os.makedirs(OUT_DIR, exist_ok=True)
+
+def write_outputs(rows: List[Row]) -> None:
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
+
+    cols = [
+        "home_team", "away_team", "start_time", "date",
+        "odds_home", "odds_draw", "odds_away",
+        "category", "market", "source",
+    ]
+
     with open(CSV_PATH, "w", newline="", encoding="utf-8") as f:
-        w = csv.DictWriter(f, fieldnames=cols); w.writeheader()
-        for r in rows: w.writerow({k: r.get(k, "") for k in cols})
-    with open(JSON_PATH, "w", encoding="utf-8") as f:
-        json.dump([{k: r.get(k, "") for k in cols} for r in rows], f, ensure_ascii=False, indent=2)
+        w = csv.DictWriter(f, fieldnames=cols)
+        w.writeheader()
+        for r in rows:
+            d = asdict(r)
+            w.writerow({k: d.get(k, "") for k in cols})
 
-def main():
-    txt, final_url = open_page()     # headless=True default
-    rows = parse_epl(txt, final_url)
-    write_files(rows)
-    print(f"BetJets: saved {len(rows)}")
+    with open(JSON_PATH, "w", encoding="utf-8") as f:
+        json.dump([asdict(r) for r in rows], f, ensure_ascii=False, indent=2)
+
+
+def main() -> int:
+    print(f"BetJets URL: {URL}")
+    txt, final_url = open_page_text(URL, headless=True)
+    rows = parse_rows(txt, final_url)
+    write_outputs(rows)
+    print(f"BetJets: saved {len(rows)} rows -> {CSV_PATH} / {JSON_PATH}")
+
+    # If you prefer the workflow not to fail when BetJets returns 0 (site down),
+    # keep exit code 0. If you want it to fail loudly, return 2.
+    return 0
+
 
 if __name__ == "__main__":
-    main()
-
-
-
+    raise SystemExit(main())
