@@ -17,8 +17,8 @@ from pathlib import Path
 
 # write inside the repo by default
 OUT_DIR = Path(os.getenv("OUT_DIR", "output"))
-CSV_PATH = OUT_DIR / "sunbet_premier.csv"
-JSON_PATH = OUT_DIR / "sunbet_premier.json"
+CSV_PATH = OUT_DIR / "betjets_epl.csv"
+JSON_PATH = OUT_DIR / "betjets_epl.json"
 
 
 # odds (2 decimals), date bars, and times
@@ -268,4 +268,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
