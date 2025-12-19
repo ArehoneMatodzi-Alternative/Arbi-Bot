@@ -11,8 +11,8 @@ from pathlib import Path
 
 # write inside the repo by default
 OUT_DIR = Path(os.getenv("OUT_DIR", "output"))
-CSV_PATH = OUT_DIR / "sunbet_premier.csv"
-JSON_PATH = OUT_DIR / "sunbet_premier.json"
+CSV_PATH = OUT_DIR / "supersport_premier.csv"
+JSON_PATH = OUT_DIR / "supersport_premier.json"
 
 
 # prices like 1.95 / 2.5
@@ -190,4 +190,5 @@ def main():
 
 if __name__=="__main__":
     main()
+
 
