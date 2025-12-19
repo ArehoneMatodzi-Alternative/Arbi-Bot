@@ -6,10 +6,14 @@ from typing import List, Dict, Tuple, Optional
 from playwright.sync_api import sync_playwright, TimeoutError as PWTimeout
 
 URL = "https://www.supersportbet.com/sportsbook/?utm_source=supersport&utm_campaign=navigation&utm_medium=megaMenu"
+import os
+from pathlib import Path
 
-OUT_DIR = r"C:\Users\User\Downloads\Arbitrage Website\output"
-CSV_PATH = os.path.join(OUT_DIR, "supersport_premier.csv")
-JSON_PATH = os.path.join(OUT_DIR, "supersport_premier.json")
+# write inside the repo by default
+OUT_DIR = Path(os.getenv("OUT_DIR", "output"))
+CSV_PATH = OUT_DIR / "sunbet_premier.csv"
+JSON_PATH = OUT_DIR / "sunbet_premier.json"
+
 
 # prices like 1.95 / 2.5
 re_price = re.compile(r"\b(\d{1,2}\.\d{1,2}|\d{1,2}\.\d)\b")
@@ -186,3 +190,4 @@ def main():
 
 if __name__=="__main__":
     main()
+
