@@ -1,48 +1,46 @@
 name: Run Scrapers and Update Data
-
 on:
   schedule:
-    # Runs every 5 minutes (GitHub safe limit)
-    - cron: "*/5 * * * *"
+    - cron: "*/30 * * * *"  # Every 30 minutes (safer than 5)
   workflow_dispatch:
 
 jobs:
   run-scrapers:
     runs-on: ubuntu-latest
     timeout-minutes: 20
-
+    permissions:
+      contents: write  # Needed to push changes
+    
     steps:
-      # 1️⃣ Checkout repository
       - name: Checkout repository
         uses: actions/checkout@v4
-
-      # 2️⃣ Set up Python
+      
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.10"
-
-      # 3️⃣ Install system + Python dependencies
+      
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          python -m playwright install --with-deps
-
-      # 4️⃣ Run scraper scripts
+          python -m playwright install chromium
+          python -m playwright install-deps chromium
+      
+      - name: Ensure output directory exists
+        run: mkdir -p output
+      
       - name: Run scraping scripts
         run: |
-          python supersport_scraper.py
-          python sunbet_scraper.py
-          python betjets_scraper.py
-          python betfred_epl.py
-
-      # 5️⃣ Commit & push only if data changed
+          python supersport_scraper.py || echo "supersport failed"
+          python sunbet_scraper.py || echo "sunbet failed"
+          python betjets_scraper.py || echo "betjets failed"
+          python betfred_epl.py || echo "betfred failed"
+      
       - name: Commit and push updated data
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
-
-          git add data/
-          git diff --cached --quiet || git commit -m "Auto-update scraped data"
+          git add output/
+          git diff --cached --quiet || git commit -m "Auto-update scraped data [skip ci]"
           git push
