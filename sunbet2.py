@@ -13,10 +13,14 @@ from urllib.parse import urlparse
 from playwright.sync_api import sync_playwright, Page, Frame, TimeoutError as PWTimeout
 
 URL = "https://www.sunbet.co.za/sports-landing/#sports-hub/football/england/premier_league"
+import os
+from pathlib import Path
 
-OUT_DIR = r"C:\Users\User\Downloads\Arbitrage Website\output"
-CSV_PATH = os.path.join(OUT_DIR, "sunbet_premier.csv")
-JSON_PATH = os.path.join(OUT_DIR, "sunbet_premier.json")
+# write inside the repo by default
+OUT_DIR = Path(os.getenv("OUT_DIR", "output"))
+CSV_PATH = OUT_DIR / "sunbet_premier.csv"
+JSON_PATH = OUT_DIR / "sunbet_premier.json"
+
 
 # patterns for the data to actually look pretty
 re_price = re.compile(r"\b(\d{1,2}\.\d{1,2})\b")
@@ -335,3 +339,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
